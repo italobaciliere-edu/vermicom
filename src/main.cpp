@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <BlynkSimpleEsp32_SSL.h>
+#include <WiFiManager.h>
 
 #define BLYNK_TEMPLATE_ID "TMPL2iRNz_w2r"
 #define BLYNK_TEMPLATE_NAME "Quickstart Template"
@@ -15,7 +16,7 @@
 #define SCREEN_HEIGHT 64
 
 #define OLED_RESET -1
-#define SCREEN_ADDRESS 0x3D
+#define SCREEN_ADDRESS 0x3C
 
 /* Definicao de pinos */
 #define TEMP_PIN 25
@@ -24,13 +25,11 @@
 #define PUMP_PIN 32
 #define DISPLAY_BUTTON 33
 
-char ssid[] = "Baciliere 2.4GHz";
-char pass[] = "Baciliere@589599";
-
 /* Inicializacao de pacotes */
 OneWire oneWire(TEMP_PIN);
 DallasTemperature sensors(&oneWire);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+WiFiManager wifiManager;
 
 int temperature = 0;
 int humidity = 0;
@@ -45,39 +44,54 @@ bool offset(int prev, int next)
   return false;
 }
 
-void printState() {
-    Serial.print("Umidade: ");
-    Serial.println(humidity);
+void printState()
+{
+  Serial.print("Umidade: ");
+  Serial.println(humidity);
 
-    Serial.print("Temperatura: ");
-    Serial.println(temperature);
+  Serial.print("Temperatura: ");
+  Serial.println(temperature);
 
-    Serial.print("Nivel da agua: ");
-    Serial.println(waterLevel);
+  Serial.print("Nivel da agua: ");
+  Serial.println(waterLevel);
 
-    displayMode ? Serial.println("Display desligado!") : Serial.println("Display ligado!");
+  displayMode ? Serial.println("Display desligado!") : Serial.println("Display ligado!");
 
-    digitalRead(PUMP_PIN) ? Serial.println("Bomba ligada!") : Serial.println("Bomba desligada!");
+  digitalRead(PUMP_PIN) ? Serial.println("Bomba ligada!") : Serial.println("Bomba desligada!");
 }
 
-void togglePump() {
+void togglePump()
+{
   if (!digitalRead(PUMP_PIN))
-    {
-      digitalWrite(PUMP_PIN, HIGH);
-      Blynk.virtualWrite(V3, 1);
-      Serial.println("Bomba ligada!");
-    }
-    else
-    {
-      digitalWrite(PUMP_PIN, LOW);
-      Blynk.virtualWrite(V3, 0);
-      Serial.println("Bomba desligada!");
-    }
+  {
+    digitalWrite(PUMP_PIN, HIGH);
+    Blynk.virtualWrite(V3, 1);
+    Serial.println("Bomba ligada!");
+  }
+  else
+  {
+    digitalWrite(PUMP_PIN, LOW);
+    Blynk.virtualWrite(V3, 0);
+    Serial.println("Bomba desligada!");
+  }
 }
 
 void setup()
 {
-  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+  WiFi.mode(WIFI_STA);
+  bool connected = wifiManager.autoConnect("VermiconAP", "vermicon@1234");
+
+  if (!connected)
+  {
+    Serial.println("Failed to connect Wifi");
+    ESP.restart();
+  }
+  else
+  {
+    Serial.println("Wifi Connected..");
+  }
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, WiFi.SSID().c_str(), WiFi.psk().c_str());
 
   pinMode(HUMIDITY_PIN, INPUT);
   pinMode(PUMP_PIN, OUTPUT);
@@ -87,16 +101,20 @@ void setup()
   Serial.begin(9600);
   sensors.begin();
 
-  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
+  {
     Serial.println(F("SSD1306 allocation failed"));
-    for(;;);
+    for (;;)
+      ;
   }
 
   display.display();
-  display.setTextSize(2);
+  display.setTextSize(1);
+  display.clearDisplay();
 }
 
-BLYNK_WRITE(V3) {
+BLYNK_WRITE(V3)
+{
   togglePump();
 }
 
@@ -128,9 +146,8 @@ void loop()
       Serial.println("Bomba desligada!");
     }
 
-    display.setCursor(10, 0);
     display.print("Umidade: ");
-    display.print(humidity);
+    display.println(humidity);
   }
 
   /* SeÃ§Ã£o da temperatura */
@@ -145,9 +162,8 @@ void loop()
 
     Blynk.virtualWrite(V2, temperature);
 
-    display.setCursor(10, 10);
     display.print("Temperatura: ");
-    display.print(temperature);
+    display.println(temperature);
   }
 
   /* SeÃ§Ã£o do sensor de nÃ­vel */
@@ -160,6 +176,16 @@ void loop()
 
     Serial.print("Nivel da agua: ");
     Serial.println(waterLevel);
+
+    display.print("Estado do Tanque: ");
+    if (waterLevel == 1)
+    {
+      display.println("Cheio");
+    }
+    else
+    {
+      display.println("Vazio");
+    }
   }
 
   if (!digitalRead(DISPLAY_BUTTON))
@@ -180,11 +206,15 @@ void loop()
     }
   }
 
-  if (Serial.available() > 0) {
+  if (Serial.available() > 0)
+  {
     String data = Serial.readString();
-    if (data == "ReadState") {
+    if (data == "ReadState")
+    {
       printState();
-    } else if (data == "PumpToggle") {
+    }
+    else if (data == "PumpToggle")
+    {
       togglePump();
     }
   }
