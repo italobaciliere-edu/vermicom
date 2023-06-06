@@ -32,7 +32,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 WiFiManager wifiManager;
 
 int temperature = 0;
-int humidity = 0;
+int humidity = 100;
 int waterLevel = 0;
 bool displayMode = true;
 
@@ -115,7 +115,17 @@ void setup()
 
 BLYNK_WRITE(V3)
 {
-  togglePump();
+  bool pump = param.asInt();
+  if (pump)
+  {
+    digitalWrite(PUMP_PIN, HIGH);
+    Serial.println("Bomba ligada!");
+  }
+  else
+  {
+    digitalWrite(PUMP_PIN, LOW);
+    Serial.println("Bomba desligada!");
+  }
 }
 
 void loop()
@@ -133,19 +143,20 @@ void loop()
 
     Blynk.virtualWrite(V0, humidity);
 
-    if (humidity <= 60 && !digitalRead(PUMP_PIN))
+    if (humidity <= 60 && digitalRead(PUMP_PIN) == LOW)
     {
       digitalWrite(PUMP_PIN, HIGH);
       Blynk.virtualWrite(V3, 1);
       Serial.println("Bomba ligada!");
     }
-    else if (humidity > 60 && digitalRead(PUMP_PIN))
+    else if (humidity > 60 && digitalRead(PUMP_PIN) == HIGH)
     {
       digitalWrite(PUMP_PIN, LOW);
       Blynk.virtualWrite(V3, 0);
       Serial.println("Bomba desligada!");
     }
 
+    display.setCursor(0, 0);
     display.print("Umidade: ");
     display.println(humidity);
   }
@@ -162,6 +173,7 @@ void loop()
 
     Blynk.virtualWrite(V2, temperature);
 
+    display.setCursor(0, 1);
     display.print("Temperatura: ");
     display.println(temperature);
   }
@@ -177,6 +189,7 @@ void loop()
     Serial.print("Nivel da agua: ");
     Serial.println(waterLevel);
 
+    display.setCursor(0, 2);
     display.print("Estado do Tanque: ");
     if (waterLevel == 1)
     {
