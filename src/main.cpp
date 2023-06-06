@@ -34,7 +34,33 @@ WiFiManager wifiManager;
 int temperature = 0;
 int humidity = 100;
 int waterLevel = 0;
-bool displayMode = true;
+bool displayOn = true;
+
+void changeDisplay(bool displayMode)
+{
+  if (displayMode)
+  {
+    display.ssd1306_command(SSD1306_DISPLAYON);
+    displayOn = true;
+
+    Serial.println("Display ligado!");
+
+    display.print("Umidade: ");
+    display.println(humidity);
+
+    display.print("Temperatura: ");
+    display.println(temperature);
+
+    display.print("Estado do tanque: ") ? display.println("Cheio") : display.println("Vazio");
+  }
+  else
+  {
+    display.ssd1306_command(SSD1306_DISPLAYOFF);
+    displayOn = false;
+
+    Serial.println("Display desligado!");
+  }
+}
 
 bool offset(int prev, int next)
 {
@@ -55,7 +81,7 @@ void printState()
   Serial.print("Nivel da agua: ");
   Serial.println(waterLevel);
 
-  displayMode ? Serial.println("Display desligado!") : Serial.println("Display ligado!");
+  displayOn ? Serial.println("Display ligado!") : Serial.println("Display desligado!");
 
   digitalRead(PUMP_PIN) ? Serial.println("Bomba ligada!") : Serial.println("Bomba desligada!");
 }
@@ -111,6 +137,12 @@ void setup()
   display.display();
   display.setTextSize(1);
   display.clearDisplay();
+}
+
+BLYNK_WRITE(V4)
+{
+  bool display = param.asInt();
+  changeDisplay(display);
 }
 
 BLYNK_WRITE(V3)
@@ -203,20 +235,7 @@ void loop()
 
   if (!digitalRead(DISPLAY_BUTTON))
   {
-    if (displayMode)
-    {
-      // display.noBacklight();
-      displayMode = false;
-
-      Serial.println("Display desligado!");
-    }
-    else
-    {
-      // display.backlight();
-      displayMode = true;
-
-      Serial.println("Display ligado!");
-    }
+    changeDisplay(!displayOn);
   }
 
   if (Serial.available() > 0)
