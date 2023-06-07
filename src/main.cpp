@@ -14,9 +14,7 @@
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
-
 #define OLED_RESET -1
-#define SCREEN_ADDRESS 0x3C
 
 /* Definicao de pinos */
 #define TEMP_PIN 25
@@ -36,6 +34,40 @@ int humidity = 100;
 int waterLevel = 0;
 bool displayOn = true;
 
+bool offset(int prev, int next)
+{
+  if (prev != next && prev != next + 1 && prev != next - 1)
+    return true;
+
+  return false;
+}
+
+void printDisplay()
+{
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+
+  display.print("Umidade: ");
+  display.println(humidity);
+
+  display.print("Temperatura: ");
+  display.println(temperature);
+
+  display.print("Tanque: ");
+  if (waterLevel == 1)
+  {
+    display.println("Cheio");
+  }
+  else
+  {
+    display.println("Vazio");
+  }
+
+  display.display();
+}
+
 void changeDisplay(bool displayMode)
 {
   if (displayMode)
@@ -45,13 +77,7 @@ void changeDisplay(bool displayMode)
 
     Serial.println("Display ligado!");
 
-    display.print("Umidade: ");
-    display.println(humidity);
-
-    display.print("Temperatura: ");
-    display.println(temperature);
-
-    display.print("Estado do tanque: ") ? display.println("Cheio") : display.println("Vazio");
+    printDisplay();
   }
   else
   {
@@ -60,14 +86,6 @@ void changeDisplay(bool displayMode)
 
     Serial.println("Display desligado!");
   }
-}
-
-bool offset(int prev, int next)
-{
-  if (prev != next && prev != next + 1 && prev != next - 1)
-    return true;
-
-  return false;
 }
 
 void printState()
@@ -91,21 +109,27 @@ void togglePump()
   if (!digitalRead(PUMP_PIN))
   {
     digitalWrite(PUMP_PIN, HIGH);
-    Blynk.virtualWrite(V3, 1);
-    Serial.println("Bomba ligada!");
+    Blynk.virtualWrite(V3, 0);
+    Serial.println("Bomba desligada!");
   }
   else
   {
     digitalWrite(PUMP_PIN, LOW);
-    Blynk.virtualWrite(V3, 0);
-    Serial.println("Bomba desligada!");
+    Blynk.virtualWrite(V3, 1);
+    Serial.println("Bomba ligada!");
   }
 }
 
 void setup()
 {
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.display(); // mostra a tela inicial do Adafruit
+  delay(1000);
+  display.clearDisplay();
+  Serial.begin(9600);
+
   WiFi.mode(WIFI_STA);
-  bool connected = wifiManager.autoConnect("VermiconAP", "vermicon@1234");
+  bool connected = wifiManager.autoConnect("VermiconAP");
 
   if (!connected)
   {
@@ -124,19 +148,13 @@ void setup()
   pinMode(WATER_LEVEL_PIN, INPUT_PULLUP);
   pinMode(DISPLAY_BUTTON, INPUT_PULLUP);
 
-  Serial.begin(9600);
   sensors.begin();
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
-  {
-    Serial.println(F("SSD1306 allocation failed"));
-    for (;;)
-      ;
-  }
-
-  display.display();
-  display.setTextSize(1);
-  display.clearDisplay();
+  Blynk.virtualWrite(V0, humidity);
+  Blynk.virtualWrite(V1, waterLevel);
+  Blynk.virtualWrite(V2, 0);
+  Blynk.virtualWrite(V3, 0);
+  Blynk.virtualWrite(V4, displayOn);
 }
 
 BLYNK_WRITE(V4)
@@ -151,12 +169,12 @@ BLYNK_WRITE(V3)
   if (pump)
   {
     digitalWrite(PUMP_PIN, HIGH);
-    Serial.println("Bomba ligada!");
+    Serial.println("Bomba ligada! - Blynk");
   }
   else
   {
     digitalWrite(PUMP_PIN, LOW);
-    Serial.println("Bomba desligada!");
+    Serial.println("Bomba desligada! - Blynk");
   }
 }
 
@@ -165,7 +183,7 @@ void loop()
   Blynk.run();
 
   /* SeÃ§Ã£o da humidade */
-  int tmpHumidity = map(analogRead(HUMIDITY_PIN), 0, 4095, 0, 100);
+  int tmpHumidity = map(analogRead(HUMIDITY_PIN), 4095, 0, 0, 100);
   if (offset(humidity, tmpHumidity))
   {
     humidity = tmpHumidity;
@@ -175,22 +193,20 @@ void loop()
 
     Blynk.virtualWrite(V0, humidity);
 
-    if (humidity <= 60 && digitalRead(PUMP_PIN) == LOW)
-    {
-      digitalWrite(PUMP_PIN, HIGH);
-      Blynk.virtualWrite(V3, 1);
-      Serial.println("Bomba ligada!");
-    }
-    else if (humidity > 60 && digitalRead(PUMP_PIN) == HIGH)
+    if (humidity <= 40)
     {
       digitalWrite(PUMP_PIN, LOW);
+      Blynk.virtualWrite(V3, 1);
+      Serial.println("Bomba ligada! - Sensor");
+    }
+    else if (humidity > 40)
+    {
+      digitalWrite(PUMP_PIN, HIGH);
       Blynk.virtualWrite(V3, 0);
-      Serial.println("Bomba desligada!");
+      Serial.println("Bomba desligada! - Sensor");
     }
 
-    display.setCursor(0, 0);
-    display.print("Umidade: ");
-    display.println(humidity);
+    printDisplay();
   }
 
   /* SeÃ§Ã£o da temperatura */
@@ -205,9 +221,7 @@ void loop()
 
     Blynk.virtualWrite(V2, temperature);
 
-    display.setCursor(0, 1);
-    display.print("Temperatura: ");
-    display.println(temperature);
+    printDisplay();
   }
 
   /* SeÃ§Ã£o do sensor de nÃ­vel */
@@ -221,21 +235,12 @@ void loop()
     Serial.print("Nivel da agua: ");
     Serial.println(waterLevel);
 
-    display.setCursor(0, 2);
-    display.print("Estado do Tanque: ");
-    if (waterLevel == 1)
-    {
-      display.println("Cheio");
-    }
-    else
-    {
-      display.println("Vazio");
-    }
+    printDisplay();
   }
 
   if (!digitalRead(DISPLAY_BUTTON))
   {
-    changeDisplay(!displayOn);
+    //changeDisplay(!displayOn);
   }
 
   if (Serial.available() > 0)
@@ -249,7 +254,11 @@ void loop()
     {
       togglePump();
     }
+    else if (data == "DisplayState")
+    {
+      printDisplay();
+      Serial.println("Printado!");
+    }
   }
-
   delay(200);
 }
